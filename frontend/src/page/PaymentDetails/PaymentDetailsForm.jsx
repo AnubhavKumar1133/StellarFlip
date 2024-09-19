@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useDispatch } from 'react-redux';
 import { addPaymentDetails } from '@/State/Withdrawal/Action';
 import { Input } from '@/components/ui/input';
+
 const PaymentDetailsForm = () => {
   const dispatch = useDispatch();
   const form = useForm({
@@ -12,15 +13,31 @@ const PaymentDetailsForm = () => {
       accountHolderName: "",
       ifsc: "",
       accountNumber: "",
+      confirmAccountNumber: "",
       bankName: ""
     }
   });
 
   const onSubmit = (data) => {
+    // Check if account numbers match
+    if (data.accountNumber !== data.confirmAccountNumber) {
+      alert("Account numbers do not match!");
+      return;
+    }
+
+    // Dispatch action to add payment details
     dispatch(addPaymentDetails({
-      paymentDetails: data,
+      paymentDetails: {
+        accountNumber: data.accountNumber,
+        accountHolderName: data.accountHolderName,
+        ifsc: data.ifsc,
+        bankName: data.bankName,
+      },
       jwt: localStorage.getItem('jwt'),
     }));
+
+    // Reset form after successful submission
+    form.reset();
     console.log(data);
   };
 
@@ -28,6 +45,7 @@ const PaymentDetailsForm = () => {
     <div className="px-10 py-2">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {/* Account Holder Name */}
           <FormField 
             control={form.control}
             name="accountHolderName"
@@ -43,6 +61,7 @@ const PaymentDetailsForm = () => {
             )}
           />
 
+          {/* IFSC Code */}
           <FormField 
             control={form.control}
             name="ifsc"
@@ -58,6 +77,7 @@ const PaymentDetailsForm = () => {
             )}
           />
 
+          {/* Account Number */}
           <FormField 
             control={form.control}
             name="accountNumber"
@@ -73,6 +93,7 @@ const PaymentDetailsForm = () => {
             )}
           />
 
+          {/* Confirm Account Number */}
           <FormField 
             control={form.control}
             name="confirmAccountNumber"
@@ -88,6 +109,7 @@ const PaymentDetailsForm = () => {
             )}
           />
 
+          {/* Bank Name */}
           <FormField 
             control={form.control}
             name="bankName"
@@ -103,6 +125,7 @@ const PaymentDetailsForm = () => {
             )}
           />
 
+          {/* Submit Button */}
           <Button type="submit" className="w-full py-5 text-black">
             Submit
           </Button>
