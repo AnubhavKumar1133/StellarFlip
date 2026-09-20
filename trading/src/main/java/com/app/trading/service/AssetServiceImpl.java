@@ -4,10 +4,12 @@ import com.app.trading.modal.Asset;
 import com.app.trading.modal.Coin;
 import com.app.trading.modal.User;
 import com.app.trading.repository.AssetRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
 import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AssetServiceImpl implements AssetService{
@@ -32,7 +34,7 @@ public class AssetServiceImpl implements AssetService{
 
     @Override
     public Asset getAssetByUserIdAndId(Long userId, Long assetId) {
-        return null;
+        return assetRepository.findByUserIdAndId(userId, assetId);
     }
 
     @Override
@@ -41,11 +43,38 @@ public class AssetServiceImpl implements AssetService{
     }
 
     @Override
+    @Transactional (rollbackFor = Exception.class)
     public Asset updateAsset(Long assetId, double quantity) throws Exception {
+        if (quantity == 0) {
+            throw new IllegalArgumentException(
+                "Quantity change cannot be zero"
+            );
+        }
+
         Asset oldAsset = getAssetById(assetId);
-        oldAsset.setQuantity(quantity + oldAsset.getQuantity());
+
+        double updatedQuantity = oldAsset.getQuantity() + quantity;
+
+        if (updatedQuantity < 0) {
+            throw new IllegalArgumentException(
+                "Insufficient asset quantity"
+            );
+        }
+
+        oldAsset.setQuantity(updatedQuantity);
 
         return assetRepository.save(oldAsset);
+    }
+
+
+    @Override
+    @Transactional
+    public Asset findAssetByUserIdAndCoinIdForUpdate(
+            Long userId, String coinId) {
+
+        return assetRepository.findByUserIdAndCoinIdForUpdate(
+            userId, coinId
+        );
     }
 
     @Override

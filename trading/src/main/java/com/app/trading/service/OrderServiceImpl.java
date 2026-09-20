@@ -5,9 +5,10 @@ import com.app.trading.domain.OrderType;
 import com.app.trading.modal.*;
 import com.app.trading.repository.OrderItemRepository;
 import com.app.trading.repository.OrderRepository;
-import jakarta.transaction.Transactional;
+// import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -90,7 +91,19 @@ public class OrderServiceImpl implements OrderService {
             throw new Exception("quantity should be > 0");
         }
         double sellPrice = coin.getCurrentPrice();
-        Asset assetToSell = assetService.findAssetByUserIdAndCoinId(user.getId(), coin.getId());
+        // Asset assetToSell = assetService.findAssetByUserIdAndCoinId(user.getId(), coin.getId());
+        Asset assetToSell =
+            assetService.findAssetByUserIdAndCoinIdForUpdate(
+                user.getId(), coin.getId()
+            );
+
+        if (assetToSell == null) {
+            throw new Exception("Asset not found");
+        }
+
+        if (assetToSell.getQuantity() < quantity) {
+            throw new Exception("Insufficient quantity to sell");
+        }
         double buyPrice = assetToSell.getBuyPrice();
         if(assetToSell!=null) {
             OrderItem orderItem = createOrderItem(coin, quantity, buyPrice, sellPrice);
@@ -115,14 +128,26 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional
-    public Order processOrder(Coin coin, double quantity, OrderType orderType, User user) throws Exception {
-        if(orderType.equals(OrderType.BUY)){
+    @Transactional (rollbackFor = Exception.class)
+    public Order processOrder(
+            Coin coin,
+            double quantity,
+            OrderType orderType,
+            User user
+    ) throws Exception {
+
+        if (orderType == null) {
+            throw new Exception("Invalid order type");
+        }
+
+        if (orderType == OrderType.BUY) {
             return buyAsset(coin, quantity, user);
         }
-        else if(orderType.equals(OrderType.SELL)){
+
+        if (orderType == OrderType.SELL) {
             return sellAsset(coin, quantity, user);
         }
-        throw new Exception("invalid order type");
+
+        throw new Exception("Invalid order type");
     }
 }

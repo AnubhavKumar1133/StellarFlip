@@ -7,6 +7,7 @@ import com.app.trading.modal.Wallet;
 import com.app.trading.repository.WalletRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -15,6 +16,11 @@ import java.util.Optional;
 public class WalletServiceImpl implements WalletService{
     @Autowired
     private WalletRepository walletRepository;
+
+
+    private Wallet getUserWalletForUpdate(User user) throws Exception {
+        return walletRepository.findByUserIdForUpdate(user.getId()).orElseThrow(() -> new Exception("Wallet not found"));
+    }
 
     @Override
     public Wallet getUserWallet(User user) {
@@ -45,34 +51,88 @@ public class WalletServiceImpl implements WalletService{
     }
 
     @Override
-    public Wallet walletToWalletTransfer(User sender, Wallet receiverWallet, Long amount) throws Exception {
-        Wallet senderWallet = getUserWallet(sender);
-        if(senderWallet.getBalance().compareTo(BigDecimal.valueOf(amount))<0){
-            throw new Exception("Insufficient balance...");
+    @Transactional (rollbackFor = Exception.class) 
+    // Ensures that database operations made by this 
+    // controller are transactional all database operations succeed together or everything falls back on failure.
+    public Wallet walletToWalletTransfer(
+            User sender,
+            Wallet receiverWallet,
+            Long amount
+    ) throws Exception {
+
+        if (amount == null || amount <= 0) {
+            throw new Exception("Transfer amount must be greater than zero");
         }
-        BigDecimal senderBalance = senderWallet.getBalance().subtract(BigDecimal.valueOf(amount));
-        senderWallet.setBalance(senderBalance);
+
+        if (receiverWallet == null || receiverWallet.getId() == null) {
+            throw new Exception("Receiver wallet not found");
+        }
+
+        Wallet senderWallet = getUserWalletForUpdate(sender);
+
+        // Lock receiver too, not just the sender
+        Wallet lockedReceiver = walletRepository
+                .findByIdForUpdate(receiverWallet.getId())
+                .orElseThrow(() -> new Exception("Receiver wallet not found"));
+
+        if (senderWallet.getId().equals(lockedReceiver.getId())) {
+            throw new Exception("Cannot transfer to the same wallet");
+        }
+
+        BigDecimal transferAmount = BigDecimal.valueOf(amount);
+
+        if (senderWallet.getBalance().compareTo(transferAmount) < 0) {
+            throw new Exception("Insufficient balance");
+        }
+
+        senderWallet.setBalance(
+                senderWallet.getBalance().subtract(transferAmount)
+        );
+
+        lockedReceiver.setBalance(
+                lockedReceiver.getBalance().add(transferAmount)
+        );
+
         walletRepository.save(senderWallet);
-        BigDecimal receiverBalance = receiverWallet.getBalance().add(BigDecimal.valueOf(amount));
-        walletRepository.save(receiverWallet);
+        walletRepository.save(lockedReceiver);
+
         return senderWallet;
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional(
+            rollbackFor = Exception.class
+    )
     public Wallet payOrderPayment(Order order, User user) throws Exception {
-        Wallet wallet = getUserWallet(user);
-        if(order.getOrderType().equals(OrderType.BUY)){
-            BigDecimal newBalance = wallet.getBalance().subtract(order.getPrice());
-            if(newBalance.compareTo(order.getPrice())<0){
+
+        if (order == null || order.getPrice() == null) {
+            throw new Exception("Invalid order");
+        }
+
+        BigDecimal amount = order.getPrice();
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new Exception("Order amount must be greater than zero");
+        }
+
+        Wallet wallet = getUserWalletForUpdate(user);
+
+        if (order.getOrderType().equals(OrderType.BUY)) {
+
+            if (wallet.getBalance().compareTo(amount) < 0) {
                 throw new Exception("Insufficient funds for this transaction");
             }
-            wallet.setBalance(newBalance);
+
+            wallet.setBalance(wallet.getBalance().subtract(amount));
+
+        } else if (order.getOrderType().equals(OrderType.SELL)) {
+
+            wallet.setBalance(wallet.getBalance().add(amount));
+
+        } else {
+            throw new Exception("Invalid order type");
         }
-        else{
-            BigDecimal newBalance = wallet.getBalance().add(order.getPrice());
-            wallet.setBalance(newBalance);
-        }
-        walletRepository.save(wallet);
-        return wallet;
+
+        return walletRepository.save(wallet);
     }
 }
